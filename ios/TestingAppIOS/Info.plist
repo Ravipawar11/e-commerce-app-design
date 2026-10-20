@@ -35,6 +35,12 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Allow TestingAppIOS to use Face ID to unlock the app.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Allow TestingAppIOS to use your microphone for voice dictation.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Allow TestingAppIOS to convert your speech into text in support messages.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

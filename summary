@@ -1,0 +1,453 @@
+ Project Architecture Notes
+
+A reference doc for the reusable patterns, context usage, and navigation structure in this app. Save as `ARCHITECTURE.md` or `NOTES.md` in the project root.
+
+
+
+ 1. Project Structure
+
+
+src/
+├── components/
+│   ├── common/                    ← Reusable UI primitives
+│   │   ├── CustomText.js
+│   │   ├── CustomButton.js
+│   │   ├── MenuRow.js             (optional extraction)
+│   │   └── index.js               (barrel export)
+│   └── states/
+│       └── LoadingScreen.js
+├── context/
+│   ├── AuthContext.js             ← Authentication state
+│   └── CartContext.js             ← Shopping cart state
+├── navigation/
+│   ├── AppNavigator.js            ← Root: chooses Auth vs Drawer
+│   ├── AuthStack.js               ← Login / Register
+│   ├── DrawerNavigator.js         ← Side drawer with custom content
+│   ├── MainTabs.js                ← Bottom tabs
+│   └── HomeStack.js               ← Stack for Home → Products → Details
+├── screens/
+│   ├── auth/
+│   │   ├── LoginScreen.js
+│   │   └── RegisterScreen.js
+│   ├── main/
+│   │   ├── HomeScreen.js
+│   │   ├── ProductsScreen.js
+│   │   ├── ProductDetailsScreen.js
+│   │   ├── CartScreen.js
+│   │   ├── ProfileScreen.js
+│   │   └── SettingsScreen.js
+│   └── drawer/
+│       └── HelpScreen.js
+└── theme/
+    ├── colors.js
+    ├── fonts.js
+    ├── sizes.js
+    ├── spacing.js
+    └── index.js                   (barrel export)
+
+
+
+
+ 2. Navigation Architecture
+
+ 2.1 Layered Navigators
+
+
+App.js
+└─ SafeAreaProvider
+    └─ AuthProvider              (context)
+        └─ CartProvider          (context)
+            └─ AppNavigator
+                └─ NavigationContainer
+                    ├─ AuthStack        (when userToken === null)
+                    └─ DrawerNavigator  (when userToken !== null)
+                        └─ Drawer.Screen "MainTabs"
+                            └─ MainTabs (bottom tabs)
+                                ├─ Tab.Screen "Home"     → HomeStack
+                                │   ├─ HomeMain
+                                │   ├─ Products
+                                │   ├─ ProductDetails
+                                │   └─ Cart
+                                ├─ Tab.Screen "Profile"
+                                └─ Tab.Screen "Settings"
+                            └─ Drawer.Screen "Help"
+
+
+ 2.2 Rule of Thumb
+
+| Navigator | Purpose | When to use |
+|--||-|
+| Stack (`createNativeStackNavigator`) | Push/pop screens with back button | Home → Products → Details, or any flow that needs back navigation |
+| Tab (`createBottomTabNavigator`) | Peer screens, no back stack | Home / Profile / Settings bottom bar |
+| Drawer (`createDrawerNavigator`) | Global navigation, side menu | Top-level sections |
+| Auth Stack | Login flow | Shown only when not authenticated |
+
+Key insight: Each navigator only manages its direct children. A tab navigator has no back stack — that's why we nested a `HomeStack` inside the Home tab so `Products` and `ProductDetails` can be pushed with a back button.
+
+ 2.3 Conditional Root Navigation
+
+jsx
+// AppNavigator.js
+{userToken !== null ? <DrawerNavigator /> : <AuthStack />}
+
+
+The root navigator swaps the entire tree based on auth state. When the user logs in, `userToken` updates, and React Navigation automatically replaces the stack — no manual `navigation.navigate('Home')` needed.
+
+
+
+ 3. Context — Two Providers
+
+ 3.1 `AuthContext`
+
+Owns: `userToken`, `isLoading`, `login()`, `logout()`.
+
+Consumed by:
+- `AppNavigator` — decides which navigator to render
+- `DrawerNavigator` — logout button in custom drawer content
+- `ProfileScreen` / `SettingsScreen` — logout action
+- `CustomButton` (via `loading={isLoading}`)
+
+Pattern:
+
+jsx
+const { logout, isLoading } = useContext(AuthContext);
+
+
+ 3.2 `CartContext`
+
+Owns:
+- `items` — array of `{ ...product, qty }`
+- `addToCart(product, qty = 1)`
+- `removeFromCart(id)`
+- `increment(id)` / `decrement(id)` / `updateQty(id, qty)`
+- `clearCart()`
+- Derived: `totalItems`, `subtotal`, `savings` (via `useMemo`)
+
+Consumed by:
+- `HomeScreen` — cart badge count + Add to Cart buttons
+- `ProductsScreen` — Add to Cart buttons
+- `ProductDetailsScreen` — Add to Cart / Buy Now
+- `CartScreen` — full cart UI
+- `ProfileScreen` / `SettingsScreen` — clear cart on logout
+
+ 3.3 Provider Nesting Rules
+
+jsx
+<SafeAreaProvider>       {/ native safe-area context — outermost /}
+  <AuthProvider>         {/ auth decides app shell /}
+    <CartProvider>       {/ cart depends on auth (clear on logout) /}
+      <AppNavigator />   {/ NavigationContainer lives here /}
+    </CartProvider>
+  </AuthProvider>
+</SafeAreaProvider>
+
+
+| Rule | Why |
+||--|
+| `SafeAreaProvider` outermost | Required by `react-native-safe-area-context` for insets |
+| `AuthProvider` above `CartProvider` | Lets `CartProvider` read auth to clear cart on logout |
+| `CartProvider` above `AppNavigator` | Every screen (Home, Products, Cart) can call `useCart()` |
+| Never put a provider inside `NavigationContainer` twice | Would create duplicate state — screens see different instances |
+
+ 3.4 Custom Hook Pattern
+
+jsx
+export const useCart = () => {
+  const ctx = useContext(CartContext);
+  if (!ctx) throw new Error('useCart must be used within CartProvider');
+  return ctx;
+};
+
+
+Why: Fail fast if a component forgets the provider. Better than a runtime `undefined is not an object` deep in the render tree.
+
+
+
+ 4. Reusable UI Components
+
+ 4.1 `CustomText`
+
+Location: `src/components/common/CustomText.js`
+
+Why it exists: Centralizes typography. Every text in the app goes through it, so font family, size scale, and color tokens are consistent.
+
+API:
+
+jsx
+<CustomText
+  variant="semibold"        // light | regular | medium | semibold | bold
+  size={sizes.sm}           // numeric from theme
+  color={colors.textPrimary}
+  align="left"              // left | center | right
+  numberOfLines={2}
+  style={...}
+>
+  {children}
+</CustomText>
+
+
+Key implementation detail: `includeFontPadding: false` + `textAlignVertical: 'center'` for consistent cross-platform vertical alignment.
+
+ 4.2 `CustomButton`
+
+Location: `src/components/common/CustomButton.js`
+
+Features:
+- Variants: `primary` | `secondary` | `outline`
+- Sizes: `sm` | `md` | `lg`
+- `loading` state shows `ActivityIndicator` inline
+- `disabled` state
+- `icon` (Ionicons name) + `iconPosition` (`left` | `right`)
+- `fullWidth` flag
+
+Pitfall we fixed: Originally the import `Icon` was shadowed by a prop named `Icon`. Renamed the import to `Ionicons` and the prop to lowercase `icon`.
+
+ 4.3 Reusable Row/Section Pattern
+
+Used in `ProfileScreen` and `SettingsScreen`:
+
+jsx
+const SettingsRow = ({ icon, label, value, onPress, rightElement, danger }) => (...)
+const SettingsSection = ({ title, children }) => (...)
+const Divider = () => (...)
+
+
+Why: A single `MenuRow`/`SettingsRow` component handles 30+ rows across screens. Adding a new settings option is a 5-line change.
+
+Row anatomy:
+
+
+[icon-circle]  [label text]  [value / Switch / chevron]
+
+
+Why icon gets a tinted circle: `iconColor + '18'` gives 10% opacity background. It's the modern settings UI look (used in iOS 15+, Google apps, Spotify).
+
+ 4.4 Barrel Exports
+
+`src/components/common/index.js`:
+
+jsx
+export { CustomText } from './CustomText';
+export { CustomButton } from './CustomButton';
+
+
+Then import as:
+
+jsx
+import { CustomButton, CustomText } from '../../components/common';
+
+
+Why: Shorter imports, one place to add new shared components.
+
+
+
+ 5. Theme System
+
+ 5.1 Files
+
+| File | Contents |
+||-|
+| `colors.js` | Brand + semantic colors (`primary`, `textPrimary`, `border`, `success`, etc.) |
+| `fonts.js` | Font family map: `fonts.family.regular`, `.medium`, `.semibold`, `.bold` |
+| `sizes.js` | Numeric scale: `sizes.xs`, `.sm`, `.md`, `.lg`, `.xl`, `.xxl`, plus `radiusSm/Md/Lg` |
+| `spacing.js` | `spacing.xs`, `.sm`, `.md`, `.lg`, `.xl` — the only allowed margin/padding values |
+| `index.js` | Re-exports everything as `{ colors, fonts, sizes, spacing }` |
+
+ 5.2 Rules
+
+- Never hardcode hex colors in screens — always `colors.something`
+- Never hardcode padding/margin numbers — always `spacing.something`
+- Never hardcode font sizes — always `sizes.something`
+- When a semantic color is missing (`colors.white`, `colors.danger`), add an alias to the theme rather than replacing each usage — one change fixes all references
+
+ 5.3 Common Pitfall: Missing Color Keys
+
+If `colors.white` is `undefined`, then `color={colors.white}` silently falls back to a default. This caused invisible text on colored backgrounds.
+
+Fix: Add aliases to the theme:
+
+jsx
+white: 'FFFFFF',           // alias for colors.textWhite
+danger: 'FF3B30',          // alias for colors.error
+
+
+Or replace every `colors.white` → `colors.textWhite`. Pick one and be consistent.
+
+
+
+ 6. Common Screen Patterns
+
+ 6.1 Screen Component Signature
+
+jsx
+export const HomeScreen = ({ navigation }) => { ... }
+
+
+React Navigation injects `navigation` and `route` into every screen component. Use `navigation.navigate('RouteName', { params })` to move between screens.
+
+ 6.2 Reading Route Params
+
+jsx
+// On the sender side
+navigation.navigate('ProductDetails', { product: item });
+
+// On the receiver side (ProductDetailsScreen)
+const { product } = route.params;
+
+
+ 6.3 Reusable Render Functions
+
+Screens define `renderProduct`, `renderCategory`, `renderOffer` as local functions and pass them to `FlatList`'s `renderItem`:
+
+jsx
+<FlatList data={products} renderItem={renderProduct} keyExtractor={i => i.id} />
+
+
+Benefits:
+- Keeps the main JSX readable
+- Easy to extract into a separate `ProductCard` component later
+
+ 6.4 Fixed-Height Chips
+
+jsx
+chip: {
+  height: 36,                // fixed
+  borderRadius: 18,          // = height / 2
+  paddingHorizontal: spacing.md,
+  alignItems: 'center',      // vertical centering
+  justifyContent: 'center',  // horizontal centering
+  // NO paddingVertical — height replaces it
+}
+
+
+Why: Using `paddingVertical` alone causes chips to grow/shrink based on content. Fixed height keeps all chips uniform.
+
+ 6.5 Tap Priority — Card vs. Inner Button
+
+When a card is `TouchableOpacity` and contains an inner `CustomButton`, the inner button's `onPress` fires first, then the outer card's. On Android, both may fire. Watch for this with Add to Cart buttons inside tappable product cards — use `e.stopPropagation()` if needed.
+
+
+
+ 7. Context + Screen Integration Examples
+
+ 7.1 Add to Cart
+
+jsx
+// ProductsScreen.js
+const { addToCart } = useCart();
+
+<CustomButton
+  title="Add to Cart"
+  icon="cart-outline"
+  onPress={() => addToCart(item)}
+/>
+
+
+ 7.2 Live Cart Badge
+
+jsx
+// HomeScreen.js
+const { totalItems } = useCart();
+
+{totalItems > 0 && (
+  <View style={styles.cartBadge}>
+    <CustomText variant="bold" size={sizes.xs} color={colors.textWhite}>
+      {totalItems}
+    </CustomText>
+  </View>
+)}
+
+
+ 7.3 Logout That Clears Cart
+
+jsx
+// SettingsScreen.js
+const { logout } = useContext(AuthContext);
+const { clearCart } = useCart();
+
+const confirmLogout = () => {
+  Alert.alert('Log out', 'Are you sure?', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Log out',
+      style: 'destructive',
+      onPress: () => {
+        clearCart?.();   // wipe cart first
+        logout?.();      // then clear token
+      },
+    },
+  ]);
+};
+
+
+
+
+ 8. Bugs Fixed Along the Way (Reference)
+
+|  | Bug | Root cause | Fix |
+||--||--|
+| 1 | `GO_BACK` warning on Products | Registered as sibling tab, not stack child | Created `HomeStack`, nested inside Home tab |
+| 2 | No back button on stack screens | `screenOptions.headerLeft` shadowed per-screen override | Removed global `headerLeft`, kept it only on `HomeMain` |
+| 3 | `CustomButton` icon ignored | Import `Icon` shadowed by prop `Icon` | Renamed import → `Ionicons`, prop → `icon` |
+| 4 | Chip text invisible | `colors.white` undefined → `CustomText` default kicked in | Add `white: 'FFFFFF'` alias to theme |
+| 5 | Chips resize with content | `paddingVertical` instead of fixed `height` | `height: 36` + `borderRadius: 18` |
+| 6 | Cart math produced NaN | Prices stored as `'₹1,999'` strings | Store prices as numbers, format in view with `toLocaleString('en-IN')` |
+
+
+
+ 9. Interview Talking Points
+
+When demonstrating this project, mention these decisions:
+
+1. Conditional root navigator — auth state drives the entire app's navigation tree. No manual redirects after login/logout.
+2. Nested navigators — Stack inside Tab inside Drawer. Each layer has one job. Back navigation "just works" because the flow screens live in a stack.
+3. Two focused contexts — `AuthContext` and `CartContext` are separate. Neither is a "god context." Each has a single responsibility.
+4. Custom hooks around context — `useCart()` throws a clear error if the provider is missing. Better DX than silent failures.
+5. Reusable UI primitives with props — `CustomText`, `CustomButton`, `SettingsRow` all take semantic props, not raw style objects. Screens stay declarative.
+6. Theme as single source of truth — no hardcoded colors, sizes, or spacing in screens. Changing `colors.primary` instantly re-skins the app.
+7. Left-aligned dividers in menus — margin-left matches `icon width + gap` so the divider aligns with the label, not the icon. Tiny detail that signals polish.
+8. Fixed-height chips with pill radius — `borderRadius = height / 2` creates perfect pills regardless of label length.
+9. Derived state via `useMemo` — `subtotal`, `savings`, `totalItems` are computed, never stored. Impossible for them to drift out of sync with `items`.
+10. Confirmation before destructive actions — logout and delete account both go through `Alert.alert`. Prevents accidental data loss.
+
+
+
+ 10. Cheatsheet
+
+jsx
+// Add a new screen to the Home stack
+// HomeStack.js
+<Stack.Screen name="NewScreen" component={NewScreen} options={{ title: 'New' }} />
+
+// Navigate
+navigation.navigate('NewScreen', { id: 123 });
+
+// Read params
+const { id } = route.params;
+
+// Read auth
+const { userToken, logout } = useContext(AuthContext);
+
+// Read cart
+const { items, totalItems, addToCart } = useCart();
+
+// Reusable UI
+<CustomText variant="semibold" size={sizes.sm} color={colors.textPrimary}>Hi</CustomText>
+<CustomButton title="Save" icon="checkmark" onPress={handleSave} />
+<CustomButton title="Cancel" variant="outline" onPress={handleCancel} />
+
+// Themed styles
+const styles = StyleSheet.create({
+  card: {
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: sizes.radiusMd,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+});
+
+
+
+
+Save this as `ARCHITECTURE.md` in your project root. It's a self-contained reference you can re-read before interviews and show as evidence of the design decisions behind the codebase.

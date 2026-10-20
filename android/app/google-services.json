@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "20562728880",
+    "project_id": "logiclabsdonormangement",
+    "storage_bucket": "logiclabsdonormangement.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:20562728880:android:188626a828c649f4b66875",
+        "android_client_info": {
+          "package_name": "com.logiclabs.donormanager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC70fg1IsN33EzehzIvxF1jGc2trTtzqFE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

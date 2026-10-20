@@ -1,5 +1,16 @@
-import React, { useState, useContext } from 'react';
-import { View, StyleSheet, TextInput } from 'react-native';
+import React, { useState, useContext, useRef, useEffect } from 'react';
+import {
+  View,
+  StyleSheet,
+  TextInput,
+  Animated,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView, // <-- Added SafeAreaView
+} from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AuthContext } from '../../context/AuthContext';
 import { CustomButton, CustomText } from '../../components/common';
 import { colors, fonts, sizes, spacing } from '../../theme';
@@ -10,99 +21,215 @@ export const RegisterScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const { register, isLoading } = useContext(AuthContext);
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
   const handleRegister = () => {
     if (!name || !email || !password) return;
     register(name, email, password);
   };
 
   return (
-    <View style={styles.container}>
-      <CustomText variant="bold" size={sizes.title} color={colors.primary}>
-        Create Account
-      </CustomText>
-      <CustomText variant="regular" size={sizes.md} color={colors.textSecondary} style={styles.subtitle}>
-        Sign up to get started
-      </CustomText>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Full Name"
-        placeholderTextColor={colors.textMuted}
-        value={name}
-        onChangeText={setName}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email Address"
-        placeholderTextColor={colors.textMuted}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor={colors.textMuted}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      <CustomButton
-        title="Register"
-        onPress={handleRegister}
-        loading={isLoading}
-        style={styles.button}
-      />
-
-      <View style={styles.footer}>
-        <CustomText variant="regular" size={sizes.sm} color={colors.textSecondary}>
-          Already have an account?{' '}
-        </CustomText>
-        <CustomText
-          variant="semibold"
-          size={sizes.sm}
-          color={colors.primary}
-          onPress={() => navigation.navigate('Login')}
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
         >
-          Log In
-        </CustomText>
-      </View>
-    </View>
+          <Animated.View
+            style={[
+              styles.content,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+            ]}
+          >
+            <View style={styles.logoContainer}>
+              <View style={styles.logoPlaceholder}>
+                <MaterialCommunityIcons name="star-four-points" size={30} color="#FFF" />
+              </View>
+            </View>
+
+            <CustomText variant="bold" style={styles.title}>
+              Create Account
+            </CustomText>
+            <CustomText variant="regular" style={styles.subtitle}>
+              Sign up to get started with your new account
+            </CustomText>
+
+            <View style={styles.inputContainer}>
+              <MaterialCommunityIcons
+                name="account-outline"
+                size={22}
+                color={colors.primary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Full Name"
+                placeholderTextColor={colors.textMuted || colors.textSecondary}
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <MaterialCommunityIcons
+                name="email-outline"
+                size={22}
+                color={colors.primary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="E-mail"
+                placeholderTextColor={colors.textMuted || colors.textSecondary}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <MaterialCommunityIcons
+                name="shield-lock-outline"
+                size={22}
+                color={colors.primary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={colors.textMuted || colors.textSecondary}
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
+
+            <CustomButton
+              title="Register"
+              onPress={handleRegister}
+              loading={isLoading}
+              style={styles.button}
+            />
+
+            <View style={styles.footer}>
+              <CustomText variant="regular" style={styles.footerText}>
+                Already have an account?{' '}
+              </CustomText>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                <CustomText variant="bold" style={styles.footerLink}>
+                  Log In
+                </CustomText>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  container: {
+    flex: 1,
+  },
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
-    padding: spacing.xl,
+    padding: 24,
+    paddingTop: 40,
+    paddingBottom: 40,
+  },
+  content: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  logoContainer: {
+    marginBottom: 20,
+  },
+  logoPlaceholder: {
+    width: 60,
+    height: 60,
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 28,
+    color: colors.textPrimary,
+    marginBottom: 8,
   },
   subtitle: {
-    marginBottom: spacing.xl,
-    marginTop: spacing.xs,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 20,
+    paddingHorizontal: 20,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F6F8',
+    borderRadius: 25,
+    marginBottom: 16,
+    paddingHorizontal: 20,
+    height: 56,
+    width: '100%',
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: sizes.radiusMd,
-    paddingHorizontal: spacing.md,
-    fontFamily: fonts.family.regular,
-    fontSize: sizes.md,
+    flex: 1,
+    fontSize: 16,
     color: colors.textPrimary,
-    marginBottom: spacing.md,
+    height: '100%',
+    fontFamily: fonts?.family?.regular || undefined,
   },
   button: {
-    marginTop: spacing.md,
+    marginTop: 16,
+    width: '100%',
+    borderRadius: 28,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: spacing.xl,
+    alignItems: 'center',
+    marginTop: 24,
+    paddingBottom: 20,
+  },
+  footerText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  footerLink: {
+    color: colors.primary,
+    fontSize: 14,
   },
 });

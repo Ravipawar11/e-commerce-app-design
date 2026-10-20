@@ -11,6 +11,7 @@ export const colors = {
   textSecondary: '#666666',
   textMuted: '#999999',
   textWhite: '#FFFFFF',
+   white: '#FFFFFF',     
   
   border: '#E5E5EA',
   error: '#FF3B30',
